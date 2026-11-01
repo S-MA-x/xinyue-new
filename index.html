@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>给欣悦神的星河</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #03040a; color: #fff; overflow: hidden; font-family: -apple-system, sans-serif; height: 100vh; }
+  
+  /* 授权层 */
+  .auth-overlay {
+    position: fixed; inset: 0; background: #03040a; z-index: 999; 
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity 0.8s; text-align: center;
+  }
+  .auth-overlay.hide { opacity: 0; pointer-events: none; }
+  .auth-btn {
+    margin-top: 30px; padding: 18px 60px; border-radius: 50px; border: none; font-size: 22px; font-weight: bold;
+    background: #ffffff; color: #000000; cursor: pointer; transition: all 0.3s;
+    box-shadow: 0 0 20px rgba(255,255,255,0.3);
+  }
+  .auth-btn:hover { transform: scale(1.05); background: #e0e0e0; }
+
+  /* 3D 容器 */
+  #canvas-container { position: fixed; inset: 0; z-index: 1; }
+
+  /* UI 层 */
+  #ui-layer {
+    position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    display: flex; flex-direction: column; justify-content: space-between; align-items: center;
+    padding: 40px 20px;
+  }
+  
+  .header { text-align: center; margin-top: 20px; }
+  h1 { margin: 0 0 15px 0; font-size: 26px; font-weight: 300; letter-spacing: 4px; text-shadow: 0 0 15px rgba(255,255,255,0.6); min-height: 36px; }
+  .hint { font-size: 14px; color: #aabbdd; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .mic-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4757; transition: 0.3s; }
+  .mic-dot.active { background: #2ed573; box-shadow: 0 0 10px #2ed573; }
+
+  /* 塔罗牌区域 */
+  #tarot-area {
+    display: none; /* 初始隐藏 */
+    flex-wrap: wrap; justify-content: center; gap: 15px;
+    margin-bottom: 20px; perspective: 1000px;
+  }
+  #tarot-area.show { display: flex; }
+  
+  .card {
+    width: 100px; height: 150px; cursor: pointer; position: relative;
+    transform-style: preserve-3d; transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    pointer-events: auto;
+  }
+  .card.flipped { transform: rotateY(180deg); pointer-events: none; }
+  
+  .card-face {
+    position: absolute; inset: 0; border-radius: 8px; backface-visibility: hidden;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    padding: 10px; text-align: center;
+  }
+  
+  /* 牌背面 */
+  .card-back {
+    background: linear-gradient(135deg, #1a2347, #0a0f25);
+    background-image: radial-gradient(circle at center, #3b5a9b 1px, transparent 1px);
+    background-size: 10px 10px;
+  }
+  .card-back::after {
+    content: '✨'; font-size: 30px; opacity: 0.5;
+  }
+
+  /* 牌正面（翻开后） */
+  .card-front {
+    background: linear-gradient(180deg, #fff, #e6e9f5);
+    color: #1a2347; transform: rotateY(180deg);
+    font-family: "Kaiti", "STKaiti", serif;
+    border: 2px solid #ffd700; box-shadow: 0 0 20px rgba(255,215,0,0.3);
+  }
+  .card-title { font-size: 12px; font-weight: bold; color: #c0392b; margin-bottom: 8px; }
+  .card-text { font-size: 12px; line-height: 1.4; color: #333; }
+
+  /* 信件按钮 */
+  #openLetterBtn {
+    pointer-events: auto; padding: 12px 40px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.1); color: #fff; font-size: 16px; cursor: pointer;
+    backdrop-filter: blur(10px); transition: 0.3s; opacity: 0; display: none;
+  }
+  #openLetterBtn.show { display: block; animation: fadeIn 1s forwards; }
+  @keyframes fadeIn { to { opacity: 1; } }
+  #openLetterBtn:hover { background: rgba(255,255,255,0.2); box-shadow: 0 0 20px rgba(255,255,255,0.3); }
+
+  /* 信件弹层 */
+  .letter-mask {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 200;
+  }
+  .letter-mask.show { opacity: 1; pointer-events: auto; }
+  .letter {
+    width: min(600px, 90vw); max-height: 80vh; overflow-y: auto; background: #fff; color: #222;
+    padding: 40px 30px; border-radius: 12px; font-family: "Kaiti", "STKaiti", serif; line-height: 2;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5); transform: translateY(20px); transition: 0.5s;
+  }
+  .letter-mask.show .letter { transform: translateY(0); }
+  .letter p { margin-bottom: 15px; text-indent: 2em; font-size: 15px; }
+  .letter .quote { text-align: center; font-style: italic; text-indent: 0; margin: 20px 0; color: #666; }
+  .close-btn { display: block; margin: 30px auto 0; padding: 10px 30px; border: none; background: #333; color: #fff; cursor: pointer; border-radius: 20px; font-size: 15px; }
+
+  /* 摄像头 */
+  .cam-box {
+    position: fixed; bottom: 20px; right: 20px; width: 100px; height: 75px; border-radius: 12px; overflow: hidden; border: 1px solid #555;
+    opacity: 0.2; z-index: 100; transform: scaleX(-1); display: none; transition: 0.3s;
+  }
+  .cam-box:hover { opacity: 1; }
+  .cam-box video { width: 100%; height: 100%; object-fit: cover; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div class="auth-overlay" id="authOverlay">
+  <div style="margin-bottom: 15px; font-size: 14px; color: #8899bb; letter-spacing: 2px;">A LITTLE UNIVERSE, JUST FOR YOU</div>
+  <div style="font-size: 24px; font-weight: 300; margin-bottom: 20px; color: #fff;">把星河，送给你。</div>
+  <button class="auth-btn" id="startBtn">点击开启星河</button>
+  <div style="margin-top: 40px; font-size: 13px; color: #556688; text-align: center;">* 点击后请在弹窗中点击“允许”<br>以便开启吹气检测与轻快BGM</div>
+</div>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer">
+  <div class="header">
+    <h1 id="title"></h1>
+    <div class="hint" id="hint"><div class="mic-dot" id="micDot"></div><span id="hintText">等待开启…</span></div>
+  </div>
+
+  <!-- 塔罗牌区域 -->
+  <div id="tarot-area"></div>
+
+  <!-- 信件按钮 -->
+  <button id="openLetterBtn">💌 展开那封信</button>
+</div>
+
+<div class="cam-box" id="camBox"><video id="video" autoplay muted playsinline></video></div>
+
+<!-- 信件 -->
+<div class="letter-mask" id="letterMask">
+  <div class="letter">
+    <div style="text-align:right; font-size:13px; color:#888; margin-bottom:20px;">2026年11月1日 周日</div>
+    <div style="font-size:18px; font-weight:bold; margin-bottom:20px;">亲爱的欣悦神：</div>
+    <p>二十一岁，是一棵树的可能伸向了四面八方。向上枝桠渐密，叶片渐厚，撑开自己的荫凉；向下根系在土里，悄悄延伸，不急不慌，触到更深的湿润。你就是这样一棵树，年轮一圈圈的增加，我的祝愿永远不会改变。</p>
+    <p>一条刚刚流出山谷的溪流，绕过你，根系深扎，吸收生命的甘泉。你的根系扎在这座巍峨的山，高山沉默，予你厚重；流水灵动，让你柔软。一棵盘根错节的树站在山腰，扎根进石缝里，枝伸向云深处。我始终站在你的身边，共淋一场滂霈的甘霖。</p>
+    <p class="quote">"木欣欣以向荣，泉涓涓而始流。"</p>
+    <p>春天会来，秋天也会来，而你始终在徐徐前行的路上。阳光正好，雨水正足，所有的枝桠都在朝最好的方向伸展。</p>
+    <p>二十一岁，是一棵树最舒展的季节。稳稳站在自己的土壤里，这片山坡有我们曾经所有淋过的雨。愿你二十一岁的枝头，长满无限可能的枝叶，无论伸向那一方，都是前方。</p>
+    <p style="text-align:center; font-weight:bold; margin-top:30px;">愿你如树，充满无限可能，二十一岁生日快乐。</p>
+    <div style="text-align:right; margin-top:40px; font-weight:bold;">—— 永远站在你身边的我</div>
+    <button class="close-btn" id="closeBtn">收好这封信</button>
+  </div>
+</div>
+
+<script>
+/* ================= 1. 交互逻辑与 UI ================= */
+const startBtn = document.getElementById('startBtn');
+const authOverlay = document.getElementById('authOverlay');
+const titleEl = document.getElementById('title');
+const hintText = document.getElementById('hintText');
+const micDot = document.getElementById('micDot');
+const openLetterBtn = document.getElementById('openLetterBtn');
+const video = document.getElementById('video');
+const camBox = document.getElementById('camBox');
+const tarotArea = document.getElementById('tarot-area');
+let blown = false;
+
+startBtn.addEventListener('click', async () => {
+  authOverlay.classList.add('hide');
+  typeTitle();
+  playBGM();
+  initThreeJS();
+
+  document.getElementById('canvas-container').addEventListener('click', blowOutCandle);
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    camBox.style.display = 'block';
+    hintText.textContent = "对着屏幕吹气，或点击蛋糕";
+    micDot.classList.add('active');
+    startVisionDetection();
+  } catch (err) {
+    hintText.textContent = "未开启权限，请直接点击蛋糕";
+  }
+});
+
+const titleStr = "把星河，送给你。";
+let tIdx = 0;
+function typeTitle() {
+  if (tIdx < titleStr.length) { titleEl.textContent += titleStr[tIdx++]; setTimeout(typeTitle, 150); }
+}
+
+// 吹气检测
+function startVisionDetection() {
+  const canvas = document.createElement('canvas'); canvas.width = 20; canvas.height = 20;
+  const ctx = canvas.getContext('2d');
+  let last = null;
+  setInterval(() => {
+    if (blown || video.readyState < 2) return;
+    ctx.drawImage(video, 0, 0, 20, 20);
+    const d = ctx.getImageData(0,0,20,20).data;
+    let sum = 0; for(let i=0; i<d.length; i+=4) sum+=d[i];
+    let avg = sum / 400;
+    if (last !== null && Math.abs(avg - last) > 10) blowOutCandle();
+    last = avg;
+  }, 100);
+}
+
+// 吹灭动作 -> 抽卡
+function blowOutCandle() {
+  if (blown) return; blown = true;
+  hintText.textContent = "✨ 愿望已收到，请翻开你的专属塔罗 ✨";
+  hintText.style.color = "#ffd700";
+  micDot.classList.remove('active');
+  window.extinguishFlame();
+  
+  setTimeout(() => {
+    renderTarot();
+    tarotArea.classList.add('show');
+  }, 800);
+}
+
+/* ================= 2. 塔罗牌逻辑 ================= */
+const tarotData = [
+  { title: '星星 The Star', text: '愿你像星星一样，在自己的轨道上闪闪发光，指引方向，也照亮自己。' },
+  { title: '太阳 The Sun', text: '二十一岁的阳光正好，愿你永远灿烂，充满活力，所有的阴霾都被你的笑容驱散。' },
+  { title: '世界 The World', text: '愿你拥有广阔的世界，去想去的地方，做想做的事，成为想成为的人。' },
+  { title: '月亮 The Moon', text: '愿你内心的宇宙深邃且温柔，在每一个独处的夜晚，都能拥有平静与美梦。' },
+  { title: '命运之轮 Wheel', text: '不管命运的齿轮转向哪里，愿好运永远偏爱你，所有美好都如期而至。' },
+  { title: '愚者 The Fool', text: '愿你永远保持勇敢和好奇心，像这棵树一样，向着未知的方向自由生长。' }
+];
+
+let flippedCount = 0;
+
+function renderTarot() {
+  tarotData.forEach((data, index) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-face card-back"></div>
+      <div class="card-face card-front">
+        <div class="card-title">${data.title}</div>
+        <div class="card-text">${data.text}</div>
+      </div>
+    `;
+    card.addEventListener('click', () => {
+      if (card.classList.contains('flipped')) return;
+      card.classList.add('flipped');
+      flippedCount++;
+      if (flippedCount === tarotData.length) {
+        openLetterBtn.classList.add('show');
+        hintText.textContent = "✨ 星河已为你铺好，请查收信件 ✨";
+      }
+    });
+    tarotArea.appendChild(card);
+  });
+}
+
+document.getElementById('openLetterBtn').addEventListener('click', () => document.getElementById('letterMask').classList.add('show'));
+document.getElementById('closeBtn').addEventListener('click', () => document.getElementById('letterMask').classList.remove('show'));
+
+/* ================= 3. 甜美八音盒 BGM ================= */
+let audioCtx = null;
+function playBGM() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const melody = [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 523.25, 587.33];
+  let index = 0;
+  function playNote() {
+    if (!audioCtx) return;
+    const freq = melody[index % melody.length];
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    const now = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.15, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(now); osc.stop(now + 1.5);
+    index++;
+    setTimeout(playNote, 400); 
+  }
+  playNote();
+}
+
+/* ================= 4. Three.js 3D 渲染 ================= */
+let scene, camera, renderer, cakeGroup, flameMesh, light;
+window.extinguishFlame = function() {
+  if(flameMesh) {
+    let scale = 1;
+    let intv = setInterval(() => {
+      scale -= 0.1;
+      if (scale <= 0) { clearInterval(intv); flameMesh.visible = false; }
+      else { flameMesh.scale.set(scale, scale, scale); }
+    }, 30);
+    if(light) light.intensity = 0;
+  }
+};
+
+function initThreeJS() {
+  const container = document.getElementById('canvas-container');
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 2, 8);
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  container.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+  light = new THREE.PointLight(0xffaa00, 2, 10);
+  light.position.set(0, 1, 0); scene.add(light);
+  scene.add(new THREE.DirectionalLight(0x8899ff, 0.8));
+
+  cakeGroup = new THREE.Group();
+  scene.add(cakeGroup);
+
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 0.1, 64), new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.8 }));
+  plate.position.y = -1.5; cakeGroup.add(plate);
+
+  const cake1 = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 1, 64), new THREE.MeshPhysicalMaterial({ color: 0x1a2347, roughness: 0.3, metalness: 0.5, clearcoat: 1 }));
+  cake1.position.y = -0.95; cakeGroup.add(cake1);
+
+  const cake2 = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.8, 64), new THREE.MeshPhysicalMaterial({ color: 0x4b2c6b, roughness: 0.2, metalness: 0.6, clearcoat: 1 }));
+  cake2.position.y = -0.05; cakeGroup.add(cake2);
+
+  const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.8, 32), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xdddddd }));
+  candle.position.y = 0.75; cakeGroup.add(candle);
+
+  const flameGeo = new THREE.SphereGeometry(0.15, 16, 16); flameGeo.scale(1, 1.8, 1);
+  flameMesh = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9 }));
+  flameMesh.position.y = 1.3; cakeGroup.add(flameMesh);
+
+  const ringGeo = new THREE.TorusGeometry(2.2, 0.02, 16, 100);
+  const ring1 = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0x88bbff, transparent: true, opacity: 0.5 }));
+  ring1.rotation.x = Math.PI / 2; cakeGroup.add(ring1);
+  
+  const ring2 = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffaadd, transparent: true, opacity: 0.3 }));
+  ring2.rotation.x = Math.PI / 3; ring2.rotation.y = Math.PI / 4; ring2.scale.set(0.9, 0.9, 0.9); cakeGroup.add(ring2);
+
+  const starsGeo = new THREE.BufferGeometry();
+  const posArray = new Float32Array(800 * 3);
+  for(let i = 0; i < 800 * 3; i++) posArray[i] = (Math.random() - 0.5) * 20;
+  starsGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+  const starField = new THREE.Points(starsGeo, new THREE.PointsMaterial({ size: 0.05, color: 0xaaddff, transparent: true, opacity: 0.8 }));
+  scene.add(starField);
+
+  const clock = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    const time = clock.getElapsedTime();
+    cakeGroup.rotation.y = time * 0.2;
+    ring1.rotation.z = time * 0.5; ring2.rotation.z = -time * 0.3;
+    starField.rotation.y = time * 0.05; starField.rotation.x = time * 0.02;
+    if(flameMesh && flameMesh.visible) {
+      flameMesh.scale.x = 1 + Math.sin(time * 20) * 0.1;
+      flameMesh.scale.z = 1 + Math.cos(time * 15) * 0.1;
+      flameMesh.position.y = 1.3 + Math.sin(time * 10) * 0.02;
+      light.intensity = 1.5 + Math.sin(time * 15) * 0.5;
+    }
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+}
+</script>
+</body>
+</html>
